@@ -6,6 +6,7 @@ from urllib.parse import unquote
 
 import aiohttp
 import pytz
+import requests
 from aiocfscrape import CloudflareScraper
 from aiofile import AIOFile
 from aiohttp_proxy import ProxyConnector
@@ -47,9 +48,23 @@ new_user_api = f'{api_endpoint}api/v1/profile2'
 
 class Tapper:
     def __init__(self, Query: str):
-        fetch_data = unquote(Query).split("user=")[1].split("&auth_date=")[0]
-        json_data = json.loads(fetch_data)
-        self.session_name = json_data['username']
+        try:
+            fetch_data = unquote(Query).split("user=")[1].split("&chat_instance=")[0]
+            json_data = json.loads(fetch_data)
+            self.session_name = json_data['username']
+        except:
+            try:
+                fetch_data = unquote(Query).split("user=")[1].split("&auth_date=")[0]
+                json_data = json.loads(fetch_data)
+                self.session_name = json_data['username']
+            except:
+                try:
+                    fetch_data = unquote(unquote(Query)).split("user=")[1].split("&auth_date=")[0]
+                    json_data = json.loads(fetch_data)
+                    self.session_name = json_data['username']
+                except:
+                    logger.warning(f"Invaild query: {Query}")
+                    self.session_name = ""
         self.first_name = ''
         self.last_name = ''
         self.user_id = ''
@@ -66,16 +81,6 @@ class Tapper:
         self.worm_in_inv = {"common": 0, "uncommon": 0, "rare": 0, "epic": 0, "legendary": 0}
         self.worm_in_inv_copy = {"common": 0, "uncommon": 0, "rare": 0, "epic": 0, "legendary": 0}
         self.can_run = True
-        self.academy_ans = {
-            "What is TON?": "Ton",
-            "Coin vs Token": "Tokens",
-            "What is Airdrop?": "Airdrop",
-            "Hot vs Cold Wallet": "Wallet",
-            "Crypto vs Blockchain": "Cryptocurrency",
-            "Learn Blockchain in 3 mins": "Blockchain",
-            "News affecting the BTC price": "BTCTOTHEMOON",
-            "On-chain vs Off-chain #8": "TRANSACTION"
-        }
 
     async def get_user_agent(self):
         async with AIOFile('user_agents.json', 'r') as file:
@@ -238,10 +243,13 @@ class Tapper:
 
     async def mark_task_complete(self, task_id, task_name, type, http_client: aiohttp.ClientSession):
         if type == "academy":
-            if task_name not in list(self.academy_ans.keys()):
+            ans = requests.get("https://raw.githubusercontent.com/vanhbakaa/nothing/refs/heads/main/seed_ans.json")
+            academy_ans = ans.json()
+            if task_name not in list(academy_ans.keys()):
+                logger.info(f"{self.session_name} | Answer for {task_name} not available yet!")
                 return
             payload = {
-                "answer": self.academy_ans[task_name]
+                "answer": academy_ans[task_name]
             }
             response = await http_client.post(f'{api_endpoint}api/v1/tasks/{task_id}', json=payload)
             if response.status == 200:
@@ -789,7 +797,7 @@ class Tapper:
                         await self.play_game(http_client)
 
                 await http_client.close()
-                return
+
             except InvalidSession as error:
                 raise error
 
